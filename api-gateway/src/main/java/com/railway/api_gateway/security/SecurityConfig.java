@@ -4,70 +4,107 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.ReactiveAuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
-import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.web.server.authentication.AuthenticationWebFilter;
 import org.springframework.security.web.server.authentication.HttpStatusServerEntryPoint;
-import org.springframework.web.reactive.function.client.WebClient;
-
-import com.railway.api_gateway.dto.UserDto;
-
+import org.springframework.security.web.server.authentication.ServerAuthenticationConverter;
+import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
 import reactor.core.publisher.Mono;
 
 @Configuration
 @EnableWebFluxSecurity
 public class SecurityConfig {
 
-    @Autowired
     private JwtUtil jwtUtil;
+    private ReactiveUserDetailsService userDetailsService;
 
     @Autowired
-    private WebClient webClient;
+    public SecurityConfig(JwtUtil jwtUtil, ReactiveUserDetailsService userDetailsService) {
+        this.jwtUtil = jwtUtil;
+        this.userDetailsService = userDetailsService;
+    }
 
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         http
+            .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
             .csrf(ServerHttpSecurity.CsrfSpec::disable)
             .exceptionHandling(exceptionHandling -> exceptionHandling
                 .authenticationEntryPoint(new HttpStatusServerEntryPoint(HttpStatus.UNAUTHORIZED)))
             .authorizeExchange(exchanges -> exchanges
-                .pathMatchers("/login", "/register").permitAll()
+                .pathMatchers("/auth/register", "/auth/login").permitAll()
                 .pathMatchers("/actuator/**").permitAll()
                 .pathMatchers("/trains/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
                 .pathMatchers("/inventory/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
                 .pathMatchers("/bookings/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
                 .anyExchange().authenticated())
-            .oauth2ResourceServer(oauth2 -> oauth2
-                .jwt(jwt -> jwt
-                    .jwtDecoder(token -> Mono.just(jwtUtil.decodeJwt(token)))
-                    .jwtAuthenticationConverter(jwt -> {
-                        String username = jwtUtil.getUsernameFromToken(jwt.getTokenValue());
-                        return userDetailsService().findByUsername(username)
-                            .map(userDetails -> new UsernamePasswordAuthenticationToken(
-                                userDetails, null, userDetails.getAuthorities()));
-                    })));
+            .addFilterAt(jwtAuthenticationFilter(), SecurityWebFiltersOrder.AUTHENTICATION);
 
         return http.build();
     }
 
     @Bean
-    public ReactiveUserDetailsService userDetailsService() {
-        return username -> webClient.get()
-            .uri("lb://booking-service/users/" + username)
-            .retrieve()
-            .onStatus(HttpStatus.NOT_FOUND::equals, response -> Mono.error(new RuntimeException("User not found")))
-            .bodyToMono(UserDto.class)
-            .map(user -> User.withUsername(user.getUsername())
-                .password(user.getPassword())
-                .roles(user.getRoles().split(","))
-                .build())
-            .onErrorResume(e -> Mono.empty());
+    public AuthenticationWebFilter jwtAuthenticationFilter() {
+        AuthenticationWebFilter filter = new AuthenticationWebFilter(authenticationManager());
+        filter.setServerAuthenticationConverter(jwtAuthenticationConverter());
+        filter.setSecurityContextRepository(NoOpServerSecurityContextRepository.getInstance());
+        return filter;
     }
 
     @Bean
-    public WebClient webClient() {
-        return WebClient.builder().build();
+    public ServerAuthenticationConverter jwtAuthenticationConverter() {
+        return exchange -> {
+            String token = exchange.getRequest().getHeaders().getFirst("Authorization");
+            if (token != null && token.startsWith("Bearer ")) {
+                token = token.substring(7);
+                String username = jwtUtil.extractUsername(token);
+                String roles = jwtUtil.extractRoles(token);
+                exchange.getRequest().mutate()
+                    .header("X-Auth-User", username)
+                    .header("X-Auth-Roles", roles)
+                    .build();
+                return Mono.just(new UsernamePasswordAuthenticationToken(token, token));
+            }
+            return Mono.empty();
+        };
+    }
+
+    @Bean
+    public ReactiveAuthenticationManager authenticationManager() {
+        return authentication -> {
+            String token = (String) authentication.getCredentials();
+            return Mono.just(token)
+                .filter(t -> {
+                    try {
+                        return jwtUtil.validateToken(t);
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .flatMap(t -> {
+                    String username = jwtUtil.extractUsername(t);
+                    return userDetailsService.findByUsername(username)
+                        .map(userDetails -> (Authentication) new UsernamePasswordAuthenticationToken(
+                            userDetails, null, userDetails.getAuthorities()))
+                        .switchIfEmpty(Mono.error(new UsernameNotFoundException("User not found: " + username)));
+                })
+                .switchIfEmpty(Mono.error(new BadCredentialsException("Invalid JWT")));
+        };
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }
