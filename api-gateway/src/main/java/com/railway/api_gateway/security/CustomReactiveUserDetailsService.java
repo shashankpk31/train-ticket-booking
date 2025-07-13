@@ -1,9 +1,9 @@
+
 package com.railway.api_gateway.security;
 
 import com.railway.api_gateway.model.User;
 import com.railway.api_gateway.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.ReactiveAuthenticationManager;
 import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -14,16 +14,13 @@ import reactor.core.publisher.Mono;
 @Service
 public class CustomReactiveUserDetailsService implements ReactiveUserDetailsService {
 
-    private final ReactiveAuthenticationManager authenticationManager;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
-    CustomReactiveUserDetailsService(ReactiveAuthenticationManager authenticationManager) {
-        this.authenticationManager = authenticationManager;
+    public CustomReactiveUserDetailsService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
