@@ -15,8 +15,10 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - eureka-server
-      - postgres
+      eureka-server:
+        condition: service_started # Eureka doesn't need to be fully 'healthy' in the same way DB does, just started.
+      postgres:
+        condition: service_healthy # Wait for PostgreSQL to be ready
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/apigatewaydb
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
@@ -28,8 +30,10 @@ services:
     ports:
       - "8081:8081"
     depends_on:
-      - postgres
-      - eureka-server
+      postgres:
+        condition: service_healthy # Wait for PostgreSQL to be ready
+      eureka-server:
+        condition: service_started
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/traindb
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
@@ -41,8 +45,10 @@ services:
     ports:
       - "8082:8082"
     depends_on:
-      - postgres
-      - eureka-server
+      postgres:
+        condition: service_healthy # Wait for PostgreSQL to be ready
+      eureka-server:
+        condition: service_started
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/inventorydb
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
@@ -54,9 +60,12 @@ services:
     ports:
       - "8083:8083"
     depends_on:
-      - postgres
-      - kafka
-      - eureka-server
+      postgres:
+        condition: service_healthy # Wait for PostgreSQL to be ready
+      kafka:
+        condition: service_healthy # Wait for Kafka to be ready
+      eureka-server:
+        condition: service_started
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/bookingdb
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -69,8 +78,10 @@ services:
     ports:
       - "8084:8084"
     depends_on:
-      - kafka
-      - eureka-server
+      kafka:
+        condition: service_healthy # Wait for Kafka to be ready
+      eureka-server:
+        condition: service_started
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
@@ -85,6 +96,12 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
+    healthcheck: # Healthcheck for PostgreSQL
+      test: ["CMD-SHELL", "pg_isready -U postgres -d apigatewaydb"] # Test connection to one of the databases
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s # Give it some time to start up before checking
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
     environment:
@@ -92,16 +109,31 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    healthcheck: # Healthcheck for Zookeeper
+      test: ["CMD-SHELL", "echo stat | nc localhost 2181"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
   kafka:
     image: confluentinc/cp-kafka:latest
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy # Wait for Zookeeper to be healthy
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_PROCESS_ROLES: broker # Added this line as per previous diagnosis
+      # KAFKA_LISTENERS: CLIENT://kafka:9092 # Example, usually not needed if ADVERTISED_LISTENERS is set
+      # KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CLIENT:PLAINTEXT # Example
     ports:
       - "9092:9092"
+    healthcheck: # Healthcheck for Kafka
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s # Kafka takes a bit longer to start
 volumes:
   postgres-data:

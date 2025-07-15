@@ -45,22 +45,15 @@ public class SecurityConfig {
             .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
             // Disable CSRF protection for API gateway
             .csrf(ServerHttpSecurity.CsrfSpec::disable)
-            // Configure exception handling for unauthorized access
             .exceptionHandling(exceptionHandling -> exceptionHandling
                 .authenticationEntryPoint(new HttpStatusServerEntryPoint(HttpStatus.UNAUTHORIZED)))
-            // Define authorization rules for different paths
             .authorizeExchange(exchanges -> exchanges
-                // Publicly accessible endpoints for authentication
                 .pathMatchers("/auth/register", "/auth/login").permitAll()
-                // Actuator endpoints for monitoring (also public)
                 .pathMatchers("/actuator/**").permitAll()
-                // Endpoints requiring USER or ADMIN roles
                 .pathMatchers("/trains/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
                 .pathMatchers("/inventory/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
                 .pathMatchers("/bookings/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
-                // All other exchanges require authentication
                 .anyExchange().authenticated())
-            // Add the custom JWT authentication filter at the specified order
             .addFilterAt(jwtAuthenticationFilter(authenticationManager), SecurityWebFiltersOrder.AUTHENTICATION);
 
         return http.build();
