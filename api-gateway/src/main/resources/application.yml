@@ -1,0 +1,33 @@
+server:
+  port: 8080
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/apigatewaydb
+    username: postgres
+    password: 0000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  cloud:
+    gateway:
+      routes:
+        - id: train-service
+          uri: lb://train-service
+          predicates:
+            - Path=/trains/**
+        - id: inventory-service
+          uri: lb://inventory-service
+          predicates:
+            - Path=/inventory/**
+        - id: booking-service
+          uri: lb://booking-service
+          predicates:
+            - Path=/bookings/**
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty.http.client: DEBUG

@@ -48,7 +48,7 @@ public class SecurityConfig {
             .exceptionHandling(exceptionHandling -> exceptionHandling
                 .authenticationEntryPoint(new HttpStatusServerEntryPoint(HttpStatus.UNAUTHORIZED)))
             .authorizeExchange(exchanges -> exchanges
-                .pathMatchers("/auth/register", "/auth/login").permitAll()
+                .pathMatchers("/auth/home","/auth/register", "/auth/login").permitAll()
                 .pathMatchers("/actuator/**").permitAll()
                 .pathMatchers("/trains/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
                 .pathMatchers("/inventory/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
