@@ -1,15 +1,24 @@
-server:
-  port: 8080
 spring:
+  application:
+    name: api-gateway
   datasource:
-    url: jdbc:postgresql://localhost:5432/apigatewaydb
+    url: jdbc:postgresql://postgres:5432/apigatewaydb
     username: postgres
-    password: 0000
+    password: postgres
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
   cloud:
     gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
       routes:
         - id: train-service
           uri: lb://train-service
@@ -23,11 +32,29 @@ spring:
           uri: lb://booking-service
           predicates:
             - Path=/bookings/**
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - metrics
+
+logging:
+  level:
+    org.springframework: INFO
+    com.example.apigateway: DEBUG
+
 eureka:
   client:
     service-url:
-      defaultZone: http://eureka-server:8761/eureka/
-logging:
-  level:
-    org.springframework.cloud.gateway: DEBUG
-    reactor.netty.http.client: DEBUG
+      defaultZone: http://eureka-server:8761/eureka
+
+security:
+  jwt:
+    secret-key: your-very-secure-secret-key-1234567890abcdef
+    expiration: 86400000
