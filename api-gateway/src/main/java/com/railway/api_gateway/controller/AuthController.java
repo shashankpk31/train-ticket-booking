@@ -4,9 +4,11 @@ import com.railway.api_gateway.model.User;
 import com.railway.api_gateway.security.CustomReactiveUserDetailsService;
 import com.railway.api_gateway.security.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.ReactiveAuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,14 +41,16 @@ public class AuthController {
 	}
 
 	@PostMapping("/auth/login")
-	public Mono<ResponseEntity<String>> login(@RequestBody LoginRequest loginRequest) {
-		return authenticationManager
-				.authenticate(
-						new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()))
-				.flatMap(auth -> userDetailsService.findByUsername(loginRequest.getUsername())
-						.map(userDetails -> ResponseEntity.ok(jwtUtil.generateToken(userDetails.getUsername(),
-								userDetails.getAuthorities().iterator().next().getAuthority()))));
-	}
+    public Mono<ResponseEntity<String>> login(@RequestBody LoginRequest loginRequest) {
+        return authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()))
+                .flatMap(auth -> userDetailsService.findByUsername(loginRequest.getUsername())
+                        .map(userDetails -> ResponseEntity.ok(
+                                jwtUtil.generateToken(userDetails.getUsername(), 
+                                                     userDetails.getAuthorities().iterator().next().getAuthority().replace("ROLE_", ""))))
+                .onErrorResume(AuthenticationException.class, e -> 
+                        Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials"))));
+    }
 }
 
 class LoginRequest {
