@@ -33,7 +33,7 @@ public class JwtUtil {
         }
         return Jwts.builder()
                 .setSubject(username)
-                .claim("roles", "ROLE_" + role) 
+                .claim("roles", role)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(key) 
@@ -62,8 +62,8 @@ public class JwtUtil {
         Jws<Claims> claimsJws = Jwts.parserBuilder() // Use parserBuilder()
                 .setSigningKey(key) // Set the signing key
                 .build()
-                .parseClaimsJws(token); // Parse the signed JWT
-        return claimsJws.getBody().get("roles", String.class); // Get the claims body and then the "roles" claim
+                .parseClaimsJws(token); 
+        return claimsJws.getBody().get("roles", String.class); 
     }
 
    

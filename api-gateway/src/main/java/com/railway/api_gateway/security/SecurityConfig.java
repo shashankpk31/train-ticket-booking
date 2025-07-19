@@ -5,10 +5,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.ReactiveAuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken; // Import this
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
@@ -50,9 +50,9 @@ public class SecurityConfig {
             .authorizeExchange(exchanges -> exchanges
                 .pathMatchers("/auth/home","/auth/register", "/auth/login").permitAll()
                 .pathMatchers("/actuator/**").permitAll()
-                .pathMatchers("/trains/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
-                .pathMatchers("/inventory/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
-                .pathMatchers("/bookings/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
+                .pathMatchers("/trains/**").hasAnyAuthority("USER", "ADMIN")
+                .pathMatchers("/inventory/**").hasAnyAuthority("USER", "ADMIN")
+                .pathMatchers("/bookings/**").hasAnyAuthority("USER", "ADMIN")
                 .anyExchange().authenticated())
             .addFilterAt(jwtAuthenticationFilter(authenticationManager), SecurityWebFiltersOrder.AUTHENTICATION);
 
@@ -86,20 +86,17 @@ public class SecurityConfig {
         return exchange -> {
             String token = exchange.getRequest().getHeaders().getFirst("Authorization");
             if (token != null && token.startsWith("Bearer ")) {
-                token = token.substring(7); // Remove "Bearer " prefix
-                // Extract username and roles from the JWT using JwtUtil
+                token = token.substring(7);
                 String username = jwtUtil.extractUsername(token);
                 String roles = jwtUtil.extractRoles(token);
-
-                // Mutate the request to add custom headers for downstream services
                 exchange.getRequest().mutate()
-                    .header("X-Auth-User", username)
-                    .header("X-Auth-Roles", roles)
-                    .build();
-                // Return an authenticated token. The actual authentication manager will validate this token.
-                return Mono.just(new UsernamePasswordAuthenticationToken(token, token));
+                        .header("X-Auth-User", username)
+                        .header("X-Auth-Roles", roles)
+                        .build();
+                return Mono.just(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        username, token, java.util.Collections.singletonList(new SimpleGrantedAuthority(roles))));
             }
-            return Mono.empty(); // No JWT found, proceed without authentication
+            return Mono.empty();
         };
     }
 
