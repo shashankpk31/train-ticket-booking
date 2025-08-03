@@ -24,14 +24,20 @@ spring:
           uri: lb://train-service
           predicates:
             - Path=/trains/**
+          filters:
+            - StripPrefix=1
         - id: inventory-service
           uri: lb://inventory-service
           predicates:
             - Path=/inventory/**
+          filters:
+            - StripPrefix=1
         - id: booking-service
           uri: lb://booking-service
           predicates:
             - Path=/bookings/**
+          filters:
+            - StripPrefix=1
 
 server:
   port: 8080
@@ -52,7 +58,7 @@ logging:
 eureka:
   client:
     service-url:
-      defaultZone: http://eureka-server:8761/eureka
+      defaultZone: http://eureka-server:8761/eureka/
 
 security:
   jwt:

@@ -16,3 +16,6 @@ cd ..
 cd eureka-server/
 mvn clean package
 cd ..
+docker compose build api-gateway train-service inventory-service notification-service booking-service
+docker compose up -d
+docker image prune

@@ -28,13 +28,17 @@ public class CustomReactiveUserDetailsService implements ReactiveUserDetailsServ
                 .map(user -> new org.springframework.security.core.userdetails.User(
                         user.getUsername(),
                         user.getPassword(),
-                        Collections.singletonList(new SimpleGrantedAuthority(user.getRoles()))
-                ));
+                        Collections.singletonList(new SimpleGrantedAuthority(user.getRoles()))));
     }
 
     @Transactional
     public Mono<User> registerUser(User user) {
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        return Mono.fromCallable(() -> userRepository.save(user));
+        try {
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+            return Mono.fromCallable(() -> userRepository.save(user))
+                    .onErrorMap(e -> new RuntimeException("Failed to register user: " + e.getMessage(), e));
+        } catch (Exception e) {
+            return Mono.error(new RuntimeException("Failed to register user: " + e.getMessage(), e));
+        }
     }
 }
